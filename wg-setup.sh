@@ -1,14 +1,68 @@
 #!/bin/bash
 
+# Function to display the management menu
+management_menu() {
+    echo "Management Menu"
+    echo "1. Placeholder Option 1"
+    echo "2. Placeholder Option 2"
+    echo "3. Placeholder Option 3"
+    echo "4. Placeholder Option 4"
+    while true; do
+        read -p "Please choose an option (1-4): " menu_option
+        case $menu_option in
+            1) echo "Option 1 selected";;
+            2) echo "Option 2 selected";;
+            3) echo "Option 3 selected";;
+            4) echo "Option 4 selected";;
+            *) echo "Invalid option. Please try again.";;
+        esac
+    done
+}
+
 # Function to perform the installation (Step 3)
 installation_function() {
-    echo "Starting the installation..."
+    if wg &> /dev/null; then
+        echo "WireGuard is already installed."
+        management_menu
+    fi
+    while true; do
+        read -p "Do you want to install WireGuard? (yes/no): " user_input
+        case $user_input in
+            [Yy]* ) 
+                install_wireguard
+                break;;
+            [Nn]* ) 
+                echo "Installation aborted."
+                exit 0;;
+            * ) 
+                echo "Please answer yes or no.";;
+        esac
+    done
+}
+
+# Function to install WireGuard
+install_wireguard() {
+    echo "Starting the installation of WireGuard..."
     
-    # Asking for user input
-    read -p "Please enter your input: " user_input
-    echo "You entered: $user_input"
-    
-    # Add your installation commands here
+    if [[ ${OS} == "debian" ]]; then
+        if [[ ${VERSION_ID} -ge 10 ]]; then
+            apt-get update
+            apt-get install -y wireguard iptables resolvconf qrencode
+        else
+            echo "deb http://deb.debian.org/debian buster-backports main" >/etc/apt/sources.list.d/backports.list
+            apt-get update
+            apt-get install -y iptables resolvconf qrencode
+            apt-get install -y -t buster-backports wireguard
+        fi
+    elif [[ ${OS} == "ubuntu" ]]; then
+        apt-get update
+        apt-get install -y wireguard iptables resolvconf qrencode
+    else
+        echo "Unsupported OS."
+        exit 1
+    fi
+
+    echo "WireGuard installation completed."
 }
 
 # Function to check if the user is root
@@ -23,18 +77,22 @@ check_root_user() {
 
 # Function to detect the OS version (Step 1)
 detect_os_version() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        if [ "$NAME" == "Ubuntu" ] && [ $(echo "$VERSION_ID >= 16.04" | bc) -eq 1 ]; then
-            echo "Ubuntu version is supported."
-        elif [ "$NAME" == "Debian GNU/Linux" ] && [ $(echo "$VERSION_ID >= 10" | bc) -eq 1 ]; then
-            echo "Debian version is supported."
-        else
-            echo "Unsupported OS version."
+    source /etc/os-release
+    OS="${ID}"
+    if [[ ${OS} == "debian" || ${OS} == "raspbian" ]]; then
+        if [[ ${VERSION_ID} -lt 10 ]]; then
+            echo "Your version of Debian (${VERSION_ID}) is not supported. Please use Debian 10 Buster or later"
+            exit 1
+        fi
+        OS=debian # overwrite if raspbian
+    elif [[ ${OS} == "ubuntu" ]]; then
+        RELEASE_YEAR=$(echo "${VERSION_ID}" | cut -d'.' -f1)
+        if [[ ${RELEASE_YEAR} -lt 18 ]]; then
+            echo "Your version of Ubuntu (${VERSION_ID}) is not supported. Please use Ubuntu 18.04 or later"
             exit 1
         fi
     else
-        echo "Cannot determine OS version."
+        echo "Looks like you aren't running this installer on a Debian/Raspbian or Ubuntu system"
         exit 1
     fi
 }
@@ -45,8 +103,6 @@ detect_virtualization() {
     if [ "$VIRT_ENV" == "openvz" ] || [ "$VIRT_ENV" == "lxc" ]; then
         echo "Unsupported virtualization environment ($VIRT_ENV)."
         exit 1
-    else
-        echo "Virtualization environment ($VIRT_ENV) is supported."
     fi
 }
 
