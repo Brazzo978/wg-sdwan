@@ -1,18 +1,109 @@
 #!/bin/bash
 
+# Function to add a new WireGuard client
+add_wireguard_client() {
+    echo "Add WireGuard Client"
+    while true; do
+        read -p "Do you want to add a new WireGuard tunnel? (yes/no): " user_input
+        case $user_input in
+            [Yy]* )
+                read -p "Please paste the WireGuard configuration here and press Enter: " wg_config
+                # Find the next available configuration file number
+                for i in {01..99}
+                do
+                    if [ ! -f /etc/wireguard/wg${i}.conf ]; then
+                        echo "$wg_config" > /etc/wireguard/wg${i}.conf
+                        # Try to bring up the WireGuard interface
+                        if wg-quick up wg${i}; then
+                            echo "WireGuard tunnel wg${i} added successfully."
+                        else
+                            echo "Failed to add WireGuard tunnel wg${i}."
+                            rm /etc/wireguard/wg${i}.conf  # Remove the configuration file if the command fails
+                        fi
+                        break
+                    fi
+                done
+                break;;
+            [Nn]* ) 
+                echo "Operation aborted."
+                break;;
+            * ) 
+                echo "Please answer yes or no.";;
+        esac
+    done
+}
+
+# Function to list all WireGuard configurations
+list_wireguard_configs() {
+    echo "List of WireGuard Configurations:"
+    if [ -d /etc/wireguard ]; then
+        ls /etc/wireguard/*.conf
+    else
+        echo "No configurations found."
+    fi
+}
+
+# Function to remove a WireGuard client
+remove_wireguard_client() {
+    echo "Remove WireGuard Client"
+    echo "List of WireGuard Configurations:"
+    
+    if [ -d /etc/wireguard ]; then
+        ls /etc/wireguard/*.conf
+        while true; do
+            read -p "Please enter the number of the configuration to remove (e.g., 01 for wg01.conf): " config_number
+            if [[ -f /etc/wireguard/wg${config_number}.conf ]]; then
+                read -p "Are you sure you want to remove wg${config_number}.conf? (yes/no): " confirmation
+                case $confirmation in
+                    [Yy]* )
+                        # Bring down the tunnel before removing the configuration file
+                        if wg-quick down wg${config_number} &> /dev/null; then
+                            echo "WireGuard tunnel wg${config_number} brought down successfully."
+                            if rm /etc/wireguard/wg${config_number}.conf; then
+                                echo "Configuration wg${config_number}.conf removed successfully."
+                            else
+                                echo "Failed to remove configuration wg${config_number}.conf."
+                            fi
+                        else
+                            echo "Failed to bring down the WireGuard tunnel wg${config_number} or it was not active. Removing the configuration file anyway."
+                            if rm /etc/wireguard/wg${config_number}.conf; then
+                                echo "Configuration wg${config_number}.conf removed successfully."
+                            else
+                                echo "Failed to remove configuration wg${config_number}.conf."
+                            fi
+                        fi
+                        break;;
+                    [Nn]* )
+                        echo "Operation aborted."
+                        break;;
+                    * )
+                        echo "Please answer yes or no.";;
+                esac
+            else
+                echo "Invalid number. Please try again."
+            fi
+        done
+    else
+        echo "No configurations found."
+    fi
+}
+also
+
+
+
 # Function to display the management menu
 management_menu() {
     echo "Management Menu"
-    echo "1. Placeholder Option 1"
-    echo "2. Placeholder Option 2"
-    echo "3. Placeholder Option 3"
+    echo "1. Add WireGuard Client"
+    echo "2. List WireGuard Configs"
+    echo "3. Remove WireGuard Client"
     echo "4. Placeholder Option 4"
     while true; do
         read -p "Please choose an option (1-4): " menu_option
         case $menu_option in
-            1) echo "Option 1 selected";;
-            2) echo "Option 2 selected";;
-            3) echo "Option 3 selected";;
+            1) add_wireguard_client;;
+            2) list_wireguard_configs;;
+            3) remove_wireguard_client;;
             4) echo "Option 4 selected";;
             *) echo "Invalid option. Please try again.";;
         esac
