@@ -87,7 +87,84 @@ remove_wireguard_client() {
         echo "No configurations found."
     fi
 }
-also
+
+find_best_route() {
+    echo "Find the Best Route"
+    while true; do
+        read -p "Do you want to prefer the lowest ping or the path with less hop count to the host? (ping/tracert): " user_choice
+        case $user_choice in
+            [Pp]* ) 
+                find_lowest_ping
+                break;;
+            [Tt]* ) 
+                find_hop_tracert
+                break;;
+            * ) 
+                echo "Please answer with ping or tracert.";;
+        esac
+    done
+}
+
+
+find_lowest_ping() {
+    echo "Finding the lowest ping..."
+    
+    # Check if the hostv4.txt file exists
+    if [ ! -f /etc/wireguard/hostv4.txt ]; then
+        echo "File /etc/wireguard/hostv4.txt not found!"
+        return
+    fi
+    
+    # Get the list of WireGuard configurations
+    configs=(/etc/wireguard/wg*.conf)
+    
+    # Get the list of IP addresses
+    mapfile -t ips < /etc/wireguard/hostv4.txt
+    
+    # Initialize an associative array to store the lowest ping time for each IP
+    declare -A lowest_ping
+    
+    # Initialize an associative array to store the configuration name for the lowest ping time for each IP
+    declare -A best_config
+    
+    # Loop through each IP address
+    for ip in "${ips[@]}"; do
+        # Loop through each configuration
+        for config in "${configs[@]}"; do
+            # Extract the configuration name (without the path and extension)
+            config_name=$(basename "$config" .conf)
+            
+            # Ping the IP address through the tunnel and get the average ping time
+            # We are using the 'fping' utility here as it allows specifying the interface and gives the average ping time directly
+            # Install it with 'apt install fping' if not installed
+            {
+                avg_ping=$(fping -c 100 -I "$config_name" "$ip" 2>&1 | grep 'avg round trip time' | awk -F= '{print $2}' | awk '{print $1}')
+                
+                # Check if the ping was successful
+                if [ -n "$avg_ping" ]; then
+                    # Check if this is the lowest ping time for this IP so far
+                    if [ -z "${lowest_ping[$ip]}" ] || bc <<< "$avg_ping < ${lowest_ping[$ip]}" ; then
+                        # Update the lowest ping time and the best configuration for this IP
+                        lowest_ping["$ip"]=$avg_ping"
+                        best_config["$ip"]=$config_name"
+                    fi
+                fi
+            } &
+        done
+        
+        # Wait for all background processes to finish before moving to the next IP
+        wait
+    done
+    
+    # Write the results to the preferred.txt file
+    : > /etc/wireguard/preferred.txt  # Clear the file
+    for ip in "${ips[@]}"; do
+        echo "$ip ${best_config[$ip]} ${lowest_ping[$ip]}" >> /etc/wireguard/preferred.txt
+    done
+
+    echo "Completed. The results have been saved to /etc/wireguard/preferred.txt."
+}
+
 
 
 
@@ -97,20 +174,20 @@ management_menu() {
     echo "1. Add WireGuard Client"
     echo "2. List WireGuard Configs"
     echo "3. Remove WireGuard Client"
-    echo "4. Placeholder Option 4"
+    echo "4. Find the Best Route"
     while true; do
         read -p "Please choose an option (1-4): " menu_option
         case $menu_option in
             1) add_wireguard_client;;
             2) list_wireguard_configs;;
             3) remove_wireguard_client;;
-            4) echo "Option 4 selected";;
+            4) find_best_route;;
             *) echo "Invalid option. Please try again.";;
         esac
     done
 }
 
-# Function to perform the installation (Step 3)
+# Function to perform the installation
 installation_function() {
     if wg &> /dev/null; then
         echo "WireGuard is already installed."
